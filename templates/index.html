@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinLens – Personal Finance Anomaly Detector</title>
+  <meta name="description"
+    content="Detect spending anomalies, subscription creep, and financial drift in your bank statements.">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-msg">Analysing your transactions…</div>
+  </div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-icon">💎</span>
+      <h2>FinLens</h2>
+      <p>Finance Anomaly Detector</p>
+    </div>
+    <nav>
+      <div class="nav-section">Analysis</div>
+      <button class="nav-link active" id="nav-dashboard" data-page="dashboard">
+        <span class="icon">🏠</span> Dashboard
+      </button>
+      <button class="nav-link" id="nav-spending" data-page="spending">
+        <span class="icon">📊</span> Spending Overview
+      </button>
+      <button class="nav-link" id="nav-anomalies" data-page="anomalies">
+        <span class="icon">🔍</span> Anomaly Detection
+      </button>
+      <button class="nav-link" id="nav-timeline" data-page="timeline">
+        <span class="icon">📖</span> Financial Stories
+      </button>
+      <button class="nav-link" id="nav-insights" data-page="insights">
+        <span class="icon">💡</span> Insights
+      </button>
+      <button class="nav-link" id="nav-history" data-page="history">
+        <span class="icon">📜</span> History
+      </button>
+      <div class="nav-section" style="margin-top:8px">Data</div>
+      <button class="nav-link" id="nav-upload" data-page="upload">
+        <span class="icon">📤</span> Upload Statement
+      </button>
+      <div class="nav-section" style="margin-top:8px">Preferences</div>
+      <button class="nav-link" id="nav-settings" type="button">
+        <span class="icon">⚙️</span> Settings
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <div id="sidebar-data-info">
+        <div class="data-badge">No data loaded yet</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div id="main">
+    <!-- Top Bar -->
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button id="menu-toggle">☰</button>
+        <div>
+          <div class="topbar h1" id="topbar-title" style="font-size:18px;font-weight:700">Dashboard</div>
+          <div class="subtitle" id="topbar-sub">Overview of your financial health</div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-outline btn-sm" id="rerun-btn">⚙️ Settings</button>
+        <button class="btn btn-primary btn-sm" onclick="navigate('upload')">📤 Upload</button>
+        <span id="user-display" style="font-size:13px;color:#94a3b8;display:inline-flex;align-items:center;gap:6px;padding:4px 8px;background:rgba(255,255,255,0.04);border-radius:6px;border:1px solid #1e2d45">
+          <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:#312e81;color:#a5b4fc;text-align:center;line-height:20px;font-weight:700;font-size:11px" id="user-avatar">👤</span>
+          <span id="user-name-text">Account</span>
+        </span>
+        <a href="/logout" class="btn btn-outline btn-sm" id="logout-btn" style="border-color:rgba(239,68,68,0.4);color:#fca5a5;text-decoration:none">🚪 Logout</a>
+      </div>
+    </div>
+
+    <!-- ── DASHBOARD PAGE ──────────────────────────────────── -->
+    <div class="page active" id="page-dashboard">
+      <!-- Metric Cards Row 1 -->
+      <div class="metrics-grid">
+        <div class="metric-card accent">
+          <div class="metric-icon">💳</div>
+          <div class="metric-value" id="m-total-spend">—</div>
+          <div class="metric-label">Total Spend Analysed</div>
+          <div class="metric-change" id="m-date-range" style="font-size:10px;color:#64748b;margin-top:6px">—</div>
+        </div>
+        <div class="metric-card danger">
+          <div class="metric-icon">🔔</div>
+          <div class="metric-value" id="m-alerts">—</div>
+          <div class="metric-label">Alerts Detected</div>
+          <div class="metric-change up">Needs review</div>
+        </div>
+        <div class="metric-card cyan">
+          <div class="metric-icon">📋</div>
+          <div class="metric-value" id="m-tx-count">—</div>
+          <div class="metric-label">Transactions Analysed</div>
+        </div>
+      </div>
+
+      <!-- Rolling chart + Top Transactions -->
+      <div class="grid-2" style="margin-bottom:24px">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Rolling 30-Day Spend</div>
+              <div class="card-subtitle">Sliding window view of your spending pattern</div>
+            </div>
+          </div>
+          <div class="chart-wrap short"><img id="rolling-chart" src="" alt="Rolling 30-Day Spending Graph"
+              style="width:100%; height:100%; object-fit:contain;"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Top 10 Largest Transactions</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Merchant</th>
+                  <th>Category</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody id="top-tx-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Transactions -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Recent Transactions</div>
+          <button class="btn btn-outline btn-sm" onclick="navigate('spending')">View All →</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Merchant</th>
+                <th>Category</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody id="recent-tx-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── UPLOAD PAGE ─────────────────────────────────────── -->
+    <div class="page" id="page-upload">
+      <div id="upload-alert"></div>
+      <div style="max-width:720px;margin:0 auto">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Upload Bank Statement</div>
+              <div class="card-subtitle">CSV or PDF · max 16 MB</div>
+            </div>
+          </div>
+          <div class="upload-area" id="drop-area">
+            <div class="upload-icon">📂</div>
+            <h3>Drag & drop your file here</h3>
+            <p>or click to browse from your computer</p>
+            <div class="upload-formats">
+              <span class="fmt-badge csv">CSV</span>
+              <span class="fmt-badge pdf">PDF</span>
+            </div>
+          </div>
+          <input type="file" id="file-input" accept=".csv,.pdf">
+          <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">📤 Choose
+              File</button>
+            <button class="btn btn-outline" onclick="loadDemo()">🎲 Use Demo Data</button>
+          </div>
+
+          <div class="settings-panel">
+            <h4>⚙️ Detection Sensitivity</h4>
+            <div class="slider-group">
+              <label>Spike threshold (modified-z) <span id="z-val">2.5</span></label>
+              <input type="range" id="z-slider" min="1.0" max="5.0" step="0.5" value="2.5">
+            </div>
+            <div class="slider-group">
+              <label>Drift per month (%) <span id="drift-val">4.0</span></label>
+              <input type="range" id="drift-slider" min="1.0" max="10.0" step="0.5" value="4.0">
+            </div>
+            <div style="margin-top:12px">
+              <button type="button" class="btn btn-primary btn-sm" id="page-apply-btn" onclick="applySettings()" style="width:100%">💾 Apply Settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SPENDING OVERVIEW PAGE ──────────────────────────── -->
+    <div class="page" id="page-spending">
+      <div class="grid-2" style="margin-bottom:24px">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Monthly Spending Trend</div>
+              <div class="card-subtitle">Month-by-month breakdown</div>
+            </div>
+          </div>
+          <div class="chart-wrap"><img id="monthly-chart" src="" alt="Monthly Spending Trend Graph"
+              style="width:100%; height:100%; object-fit:contain;"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Spending by Category</div>
+              <div class="card-subtitle">Proportional breakdown</div>
+            </div>
+          </div>
+          <div class="chart-wrap" style="height:220px"><img id="category-chart" src="" alt="Spending by Category Graph"
+              style="width:100%; height:100%; object-fit:contain;"></div>
+          <div class="legend" id="cat-legend"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:24px">
+        <div class="card-header">
+          <div class="card-title">Category Breakdown</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Total</th>
+                <th>Share</th>
+                <th>Bar</th>
+              </tr>
+            </thead>
+            <tbody id="cat-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Subscriptions inline -->
+      <div class="card" style="margin-bottom:24px">
+        <div class="card-header">
+          <div>
+            <div class="card-title">🔄 Recurring Subscriptions</div>
+            <div class="card-subtitle" id="subs-summary">—</div>
+          </div>
+        </div>
+        <div class="subs-grid" id="subs-container">
+          <div class="empty-state">
+            <div class="es-icon">📋</div>
+            <h3>Loading…</h3>
+          </div>
+        </div>
+      </div>
+
+      <!-- What-if -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">🎚️ What-If Simulator</div>
+            <div class="card-subtitle">See how much you'd save by cancelling subscriptions</div>
+          </div>
+        </div>
+        <div class="whatif-grid">
+          <div>
+            <div style="font-size:13px;color:#94a3b8;margin-bottom:12px">Select subscriptions to cancel:</div>
+            <div class="cancel-list" id="whatif-list"></div>
+          </div>
+          <div>
+            <div class="metrics-grid" style="grid-template-columns:1fr;gap:12px;margin-bottom:0">
+              <div class="metric-card success" style="padding:14px">
+                <div class="metric-label">Saved per year</div>
+                <div class="metric-value" id="wi-saved-year" style="font-size:20px">₹0</div>
+              </div>
+              <div class="metric-card" style="padding:14px">
+                <div class="metric-label">Saved per month</div>
+                <div class="metric-value" id="wi-saved-month" style="font-size:20px">₹0/mo</div>
+              </div>
+              <div class="metric-card accent" style="padding:14px">
+                <div class="metric-label">New monthly total</div>
+                <div class="metric-value" id="wi-new-monthly" style="font-size:20px">₹0/mo</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height:220px;margin-top:20px">
+          <img id="whatif-chart" src="" alt="Subscription What-If Graph"
+            style="width:100%; height:100%; object-fit:contain;"
+            onerror="this.style.opacity='0'" onload="this.style.opacity='1'">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ANOMALY DETECTION PAGE ──────────────────────────── -->
+    <div class="page" id="page-anomalies">
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div class="card-title" style="margin-bottom:0">🔍 Anomaly Detection</div>
+              <span id="sensitivity-badge" style="background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600">Mode: Normal (z=2.5)</span>
+            </div>
+            <div class="card-subtitle" id="anomaly-count" style="margin-top:4px">Scanning for duplicates and unusual spikes…</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span style="font-size:12px;color:#64748b">Flags:</span>
+            <span class="anomaly-tag tag-dup">👯 DUPLICATE</span>
+            <span class="anomaly-tag tag-spike">⚡ SPIKE</span>
+          </div>
+        </div>
+      </div>
+      <div id="anomaly-summary"></div>
+      <div id="anomalies-container">
+        <div class="empty-state">
+          <div class="es-icon">🔍</div>
+          <h3>Loading anomalies…</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TIMELINE PAGE ───────────────────────────────────── -->
+    <div class="page" id="page-timeline">
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+          <div>
+            <div class="card-title">📖 Financial Stories – Recent Two Months</div>
+            <div class="card-subtitle">Month-over-month narrative analysis of your spending patterns and changes</div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="loadStories()">🔄 Refresh Stories</button>
+        </div>
+      </div>
+      <div class="timeline" id="timeline-container">
+        <div class="empty-state">
+          <div class="es-icon">📖</div>
+          <h3>Loading your story…</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── INSIGHTS PAGE ───────────────────────────────────── -->
+    <div class="page" id="page-insights">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">💡 Smart Insights & Recommendations</div>
+        <div class="card-subtitle">AI-powered observations to help you spend smarter</div>
+      </div>
+      <div id="insights-container">
+        <div class="empty-state">
+          <div class="es-icon">💡</div>
+          <h3>Loading insights…</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── HISTORY PAGE ─────────────────────────────────────── -->
+    <div class="page" id="page-history">
+      <div id="history-alert"></div>
+
+      <!-- Uploaded Statements List -->
+      <div class="card" style="margin-bottom:24px">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+          <div>
+            <div class="card-title">📜 Statement Upload History</div>
+            <div class="card-subtitle">Previous bank statements uploaded to your account</div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="loadHistory()">🔄 Refresh History</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Statement File</th>
+                <th>Uploaded On</th>
+                <th>Transactions</th>
+                <th>Date Range</th>
+                <th>Total Spending</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body">
+              <tr>
+                <td colspan="7" style="text-align:center;color:#64748b;padding:24px">Loading statement history…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Selected Statement Transaction Details Inspector -->
+      <div class="card" id="history-details-card" style="display:none;margin-bottom:24px">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+          <div>
+            <div class="card-title" id="history-detail-title">Transaction Details</div>
+            <div class="card-subtitle" id="history-detail-sub">Detailed breakdown of transactions in this statement</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" id="load-analysis-btn">📊 View Analysis in Dashboard</button>
+            <button class="btn btn-outline btn-sm" onclick="$('#history-details-card').style.display='none'">✕ Close</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="max-height:480px;overflow-y:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Merchant</th>
+                <th>Category</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody id="history-tx-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:24px">⚙️</span>
+          <div>
+            <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--text)">Detection & Display Settings</h3>
+            <p style="margin:4px 0 0;font-size:12px;color:var(--text3)">Configure anomaly sensitivity and data
+              preferences</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="close-settings-btn" title="Close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Sensitivity Presets -->
+        <div class="settings-section">
+          <label class="settings-section-title">Sensitivity Presets</label>
+          <div class="preset-buttons">
+            <button type="button" class="preset-btn" data-preset="strict">
+              <span class="preset-name">Strict</span>
+              <span class="preset-desc">More alerts · z=1.5, drift=2.0%</span>
+            </button>
+            <button type="button" class="preset-btn active" data-preset="normal">
+              <span class="preset-name">Normal (Default)</span>
+              <span class="preset-desc">Standard · z=2.5, drift=4.0%</span>
+            </button>
+            <button type="button" class="preset-btn" data-preset="relaxed">
+              <span class="preset-name">Relaxed</span>
+              <span class="preset-desc">Fewer alerts · z=3.5, drift=6.0%</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Custom Sliders -->
+        <div class="settings-section">
+          <label class="settings-section-title">Fine-tune Sensitivity</label>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Spike Threshold (Modified Z-Score)</span>
+              <span class="setting-help">Lower = more sensitive to sudden high purchases</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" id="modal-z-slider" min="1.0" max="5.0" step="0.5" value="2.5">
+              <span class="setting-val" id="modal-z-val">2.5</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Category Drift Rate (% / month)</span>
+              <span class="setting-help">Flag categories growing faster than this monthly rate</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" id="modal-drift-slider" min="1.0" max="10.0" step="0.5" value="4.0">
+              <span class="setting-val" id="modal-drift-val">4.0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="settings-section">
+          <label class="settings-section-title">Quick Actions</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="button" class="btn btn-outline btn-sm" id="modal-load-demo-btn">🎲 Reset to Demo Data</button>
+            <button type="button" class="btn btn-outline btn-sm" id="modal-upload-nav-btn">📤 Go to File Upload</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="modal-cancel-btn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="modal-apply-btn">💾 Apply & Re-analyse</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast"></div>
+
+  <script src="/static/script.js"></script>
+</body>
+
+</html>

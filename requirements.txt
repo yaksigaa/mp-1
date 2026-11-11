@@ -1,0 +1,7 @@
+flask>=3.0
+pandas>=2.0
+numpy>=1.26
+pdfplumber>=0.11
+werkzeug>=3.0
+boto3>=1.34
+
